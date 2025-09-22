@@ -1,0 +1,7 @@
+selenium
+webdriver-manager
+pandas
+leia-br
+matplotlib
+tqdm
+python-dotenv
