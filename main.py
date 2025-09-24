@@ -1,58 +1,83 @@
-import argparse #permite que executemos o comando --profile @nomedeusuario
-from scraper import start_driver, collect_last_posts_with_comments #inicia o navegador e a coleta de dados
-from preprocess import clean_text #limpa o texto dos comentários
-from sentiment import classify_sentiment #faz a análise de sentimento
-import pandas as pd #chama a biblioteca pandas
+import argparse
+import pandas as pd
+from scraper import start_driver, login_and_wait, collect_last_posts_with_comments
+from preprocess import clean_text
+from sentiment import classify_sentiment
+from visualize import plot_by_post
 
-#define a função principal para execução do scraper
-def main(profile: str, limit: int, headless: bool = True): #nome do perfil / num. de posts coletados / para que o navegador seja rodado em segundo plano
-    driver = start_driver(headless=headless) #inicializa o navegador
-    try: #inicia a coleta e classificação
-        #1. coleta de dados
-        #usa o scraper para coletar as postagens e seus comentários
+def main(profile: str, limit: int, headless: bool = True):
+    """
+    Função principal que orquestra todo o processo:
+    1. Inicia o navegador
+    2. Realiza o login
+    3. Coleta posts e comentários
+    4. Pré-processa os textos
+    5. Analisa o sentimento
+    6. Salva o dataset em CSV
+    7. Gera o gráfico de visualização
+    """
+    # Usa o argumento headless corretamente
+    driver = start_driver(headless=headless) 
+    try:
+        if not login_and_wait(driver, wait_time=120):
+            print("Login falhou. Encerrando o script.")
+            return
+
+        # 1. Coleta de dados
+        print(f"\nIniciando coleta de {limit} posts do perfil {profile}...")
         posts = collect_last_posts_with_comments(driver, profile, limit)
         
-        #cria uma lista vazia para armazenar os dados coletados
+        if not posts:
+            print("Nenhum post foi retornado pelo scraper. O CSV não será gerado.")
+            return
+
+        # 2. Processamento dos dados
         rows = []
+        total_comments = sum(len(p.get("comentarios", [])) for p in posts)
+        print(f"\nProcessando um total de {total_comments} comentários de {len(posts)} posts...")
 
-        #2. processar cada um dos dados pegues
-        #loop para percorrer cada postagem encontrada
         for post in posts:
-            #loop para percorrer cada comentário dentro da postagem atual
-            for comment in post["comentarios"]:
-
-                #limpa o texto do comentário
+            for comment in post.get("comentarios", []):
                 cleaned = clean_text(comment)
-
-                #analisa o sentimento do texto já limpo
+                # Ignora comentários que ficaram vazios após a limpeza
+                if not cleaned:
+                    continue
+                
                 sentimento = classify_sentiment(cleaned)
-
-                #adiciona uma nova "linha" de dados a nossa lista de resultados
                 rows.append({
                     "codigo_da_postagem": post["codigo"],
-                    "conta" : profile,
+                    "conta": profile.lstrip('@'),
                     "texto_da_postagem": post["texto_post"],
                     "texto_do_comentario": cleaned,
                     "sentimento": sentimento
                 })
-        #3. salvar o resultado
-        #transforma a lista de dados em uma tabela do Pandas
-        df = pd.DataFrame(rows, columns=["codigo_da_postagem","conta","texto_da_postagem","texto_do_comentario","sentimento"])
+        
+        if not rows:
+            print("\nNenhum comentário válido foi processado. O arquivo CSV estará vazio.")
+            return
 
-        #salva a tabela em um arquivo csv na pasta "outputs"
-        df.to_csv("outputs/dataset.csv", index=False)
+        # 3. Salvamento do resultado
+        print(f"\nProcessamento finalizado. Salvando {len(rows)} comentários no CSV...")
+        output_path = "outputs/dataset.csv"
+        df = pd.DataFrame(rows, columns=[
+            "codigo_da_postagem", "conta", "texto_da_postagem", 
+            "texto_do_comentario", "sentimento"
+        ])
+        df.to_csv(output_path, index=False)
+        print(f"Dataset salvo com sucesso em {output_path}!")
 
-        #mensagem de confirmação
-        print("Dataset salvo em outputs/dataset.csv")
+        # 4. Geração do gráfico
+        print("\nGerando gráfico de análise de sentimento...")
+        plot_by_post(csv_path=output_path)
 
     finally:
-        #fecha o navegador ao final da execução
+        print("\nFechando o navegador.")
         driver.quit()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", default="@tvm")
-    parser.add_argument("--limit", type=int, default=30)
-    parser.add_argument("--headless", type=bool, default=True)
+    parser = argparse.ArgumentParser(description="Coleta e analisa posts e comentários do X/Twitter.")
+    parser.add_argument("--profile", default="@g1", help="Perfil do X/Twitter para coletar os dados.")
+    parser.add_argument("--limit", type=int, default=3, help="Número de posts para coletar.") # Reduzido para testes
+    parser.add_argument("--headless", type=bool, default=False, help="Executar o navegador em modo invisível.") # Alterado para visível por padrão
     args = parser.parse_args()
     main(args.profile, args.limit, args.headless)

@@ -1,12 +1,20 @@
+import time
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
-#para rolar a página
-import time
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+
+# --- SELETORES (ATUALIZE AQUI SE O SITE MUDAR) ---
+HOME_LINK_SELECTOR = (By.XPATH, '//a[@data-testid="AppTabBar_Home_Link"]')
+POST_CONTAINER_SELECTOR = (By.XPATH, "//article[@data-testid='tweet']")
+POST_TEXT_SELECTOR = (By.XPATH, ".//div[@data-testid='tweetText']")
+POST_LINK_SELECTOR = (By.XPATH, './/a[contains(@href, "/status/")]')
+COMMENT_SELECTOR = (By.XPATH, "//article[@data-testid='tweet']//div[@data-testid='tweetText']") # <<< LINHA ATUALIZADA
+
 
 def start_driver(headless=True):
     options = Options()
@@ -14,79 +22,126 @@ def start_driver(headless=True):
         options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--log-level=3")
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    driver.set_window_size(1200,900)
+    driver.set_window_size(1280, 1024)
     return driver
 
-def scroll_page(driver, times=3, pause=2):
-    #Rola a página principal para carregar mais postagens.
-    for _ in range(times):
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(pause)
+def login_and_wait(driver, wait_time=120):
+    print("Abrindo tela de login do X... Por favor, faça o login manualmente.")
+    driver.get("https://x.com/i/flow/login")
+    try:
+        WebDriverWait(driver, wait_time).until(EC.presence_of_element_located(HOME_LINK_SELECTOR))
+        print("Login detectado com sucesso! Continuando...")
+        return True
+    except TimeoutException:
+        print(f"ATENÇÃO: Login não detectado após {wait_time} segundos. O script pode falhar.")
+        return False
+
+def collect_comments_from_post_page(driver, max_comments=50):
+    """Coleta comentários da página de um post individual."""
+    comments = []
+    seen_comments = set()
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    
+    print("  Coletando comentários...")
+    while len(comments) < max_comments:
+        try:
+            # Espera os elementos de comentário carregarem
+            WebDriverWait(driver, 5).until(EC.presence_of_element_located(COMMENT_SELECTOR))
+            replies = driver.find_elements(*COMMENT_SELECTOR)
+            
+            for reply in replies:
+                comment_text = reply.text
+                if comment_text and comment_text not in seen_comments:
+                    comments.append(comment_text)
+                    seen_comments.add(comment_text)
+                    if len(comments) >= max_comments:
+                        break
+            
+            if len(comments) >= max_comments:
+                break
+
+            # Rolagem para carregar mais comentários
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2) # Pausa para carregamento
+            
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                print("  Fim da página de comentários.")
+                break
+            last_height = new_height
+        except TimeoutException:
+            print("  Nenhum comentário encontrado ou o tempo de espera esgotou.")
+            break
+            
+    print(f"  {len(comments)} comentários coletados.")
+    return comments
 
 def collect_last_posts_with_comments(driver, profile, limit=30):
     url = f"https://x.com/{profile.lstrip('@')}"
+    print(f"Navegando para o perfil: {url}")
     driver.get(url)
-    time.sleep(5) #aguarda a renderização inicial
 
-    #rolagem até carregar posts suficientes
-    posts_data = []
-    seen = set()
-    while len(posts_data) < limit:
-        scroll_page(driver, times = 2, pause = 3)
-
-        #localizar blocos de postagens (os seletores podem mudar)
-        posts = driver.find_elements(By.XPATH, '//article[@data-testid="tweet"]')
-        for post in posts:
-            try:
-                #captura link do post (com ID único)
-                link_el = post.find_element(By.XPATH, './/a[@href and contains(@href,"/status/")]')
-                post_url = link_el.get_attribute("href")
-                codigo = post_url.split("/")[-1]
-
-                if codigo in seen:
-                    continue
-
-                #texto do post
-                texto_el = post.find_element(By.XPATH, './/div[@data-testid="tweetText"]')
-                texto_post = texto_el.text
-
-                #abrir em nova aba para pegar comentários
-                driver.execute_script("window.open(argument[0]);", post_url)
-                driver.switch_to.window(driver.window_handles[-1])
-                time.sleep(4)
-
-                comentarios = collect_comments_from_post(driver)
-
-                driver.close()
-                driver.switch_to.window(driver.window_handles[0])
-
-                posts_data.append({
-                    "codigo": codigo,
-                    "texto_post": texto_post,
-                    "comentarios": comentarios
-                })
-                seen.add(codigo)
-
-                if len(posts_data) >= limit:
-                    break
-            except Exception as e:
-                print("Erro ao coletar um post: ", e)
-    return posts_data
-
-def collect_comments_from_post(driver, max_scrolls=5):
-    comentarios = []
-    for _ in range(max_scrolls):
-        scroll_page(driver, times=1, pause=2)
+    post_links = []
+    seen_links = set()
+    
+    # 1. Coletar os links de todos os posts primeiro
+    print("Coletando links dos posts...")
+    while len(post_links) < limit:
         try:
-            replies = driver.find_elements(By.XPATH, '//div[@data-testid="reply"]')
-            for r in replies:
+            WebDriverWait(driver, 15).until(EC.presence_of_element_located(POST_CONTAINER_SELECTOR))
+            posts_on_page = driver.find_elements(*POST_CONTAINER_SELECTOR)
+            
+            for post in posts_on_page:
                 try:
-                    texto = r.text.strip()
-                    if texto and texto not in comentarios:
-                        comentarios.append(texto)
-                except:
-                    pass
-        except:
-            pass
-    return comentarios
+                    link_element = post.find_element(*POST_LINK_SELECTOR)
+                    post_url = link_element.get_attribute("href")
+                    if post_url not in seen_links:
+                        post_links.append(post_url)
+                        seen_links.add(post_url)
+                        if len(post_links) >= limit:
+                            break
+                except NoSuchElementException:
+                    continue
+            
+            if len(post_links) >= limit:
+                break
+
+            last_height = driver.execute_script("return document.body.scrollHeight")
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(3)
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                print("Fim da página do perfil alcançado.")
+                break
+        except TimeoutException:
+            print("Tempo esgotado ao procurar posts no perfil.")
+            break
+
+    # 2. Visitar cada link para coletar dados do post e comentários
+    posts_data = []
+    print(f"\nIniciando coleta detalhada de {len(post_links)} posts...")
+    for i, link in enumerate(post_links):
+        print(f"Processando Post {i+1}/{len(post_links)}: {link}")
+        driver.get(link)
+        try:
+            # Espera o post principal carregar
+            WebDriverWait(driver, 15).until(EC.presence_of_element_located(POST_TEXT_SELECTOR))
+            post_text_element = driver.find_element(*POST_TEXT_SELECTOR)
+            post_text = post_text_element.text
+            
+            # Coleta os comentários
+            comments = collect_comments_from_post_page(driver)
+            
+            posts_data.append({
+                "codigo": link.split("/")[-1],
+                "texto_post": post_text,
+                "comentarios": comments
+            })
+        except TimeoutException:
+            print(f"  Não foi possível carregar o conteúdo do post: {link}")
+            continue
+            
+    print(f"\nColeta finalizada. Total de {len(posts_data)} posts com comentários foram processados.")
+    return posts_data
