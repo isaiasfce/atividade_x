@@ -9,12 +9,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # --- SELETORES (ATUALIZE AQUI SE O SITE MUDAR) ---
-HOME_LINK_SELECTOR = (By.XPATH, '//a[@data-testid="AppTabBar_Home_Link"]')
-POST_CONTAINER_SELECTOR = (By.XPATH, "//article[@data-testid='tweet']")
-POST_TEXT_SELECTOR = (By.XPATH, ".//div[@data-testid='tweetText']")
-POST_LINK_SELECTOR = (By.XPATH, './/a[contains(@href, "/status/")]')
-COMMENT_SELECTOR = (By.XPATH, "//article[@data-testid='tweet']//div[@data-testid='tweetText']") # <<< LINHA ATUALIZADA
-
+HOME_LINK_SELECTOR = (By.XPATH, '//a[@data-testid="AppTabBar_Home_Link"]') # Detecta o botão 'home' para dizer que o login foi bem sucedido
+POST_CONTAINER_SELECTOR = (By.XPATH, "//article[@data-testid='tweet']") # Container de cada tweet
+POST_TEXT_SELECTOR = (By.XPATH, ".//div[@data-testid='tweetText']") # Texto do tweet
+POST_LINK_SELECTOR = (By.XPATH, './/a[contains(@href, "/status/")]') # Link do tweet para coleta de comentários
+COMMENT_SELECTOR = (By.XPATH, "//article[@data-testid='tweet']//div[@data-testid='tweetText']") # <<< LINHA ATUALIZADA Texto dos comentários
 
 def start_driver(headless=True):
     options = Options()
@@ -32,7 +31,7 @@ def login_and_wait(driver, wait_time=120):
     driver.get("https://x.com/i/flow/login")
     try:
         WebDriverWait(driver, wait_time).until(EC.presence_of_element_located(HOME_LINK_SELECTOR))
-        print("Login detectado com sucesso! Continuando...")
+        print("Login realizado com sucesso! Continuando...")
         return True
     except TimeoutException:
         print(f"ATENÇÃO: Login não detectado após {wait_time} segundos. O script pode falhar.")
@@ -88,6 +87,7 @@ def collect_last_posts_with_comments(driver, profile, limit=30):
     
     # 1. Coletar os links de todos os posts primeiro
     print("Coletando links dos posts...")
+    # Coleta tweets até o limite definido
     while len(post_links) < limit:
         try:
             WebDriverWait(driver, 15).until(EC.presence_of_element_located(POST_CONTAINER_SELECTOR))

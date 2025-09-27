@@ -6,8 +6,9 @@ from sentiment import classify_sentiment
 from visualize import plot_by_post
 
 def main(profile: str, limit: int, headless: bool = True):
+    
     """
-    Função principal que orquestra todo o processo:
+    Descrição do fluxo da execução do projeto:
     1. Inicia o navegador
     2. Realiza o login
     3. Coleta posts e comentários
@@ -16,9 +17,10 @@ def main(profile: str, limit: int, headless: bool = True):
     6. Salva o dataset em CSV
     7. Gera o gráfico de visualização
     """
-    # Usa o argumento headless corretamente
+    
     driver = start_driver(headless=headless) 
     try:
+        # 0. Login na rede X
         if not login_and_wait(driver, wait_time=120):
             print("Login falhou. Encerrando o script.")
             return
@@ -44,6 +46,7 @@ def main(profile: str, limit: int, headless: bool = True):
                     continue
                 
                 sentimento = classify_sentiment(cleaned)
+                # Adiciona os comentários a lista
                 rows.append({
                     "codigo_da_postagem": post["codigo"],
                     "conta": profile.lstrip('@'),
@@ -75,8 +78,8 @@ def main(profile: str, limit: int, headless: bool = True):
         driver.quit()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Coleta e analisa posts e comentários do X/Twitter.")
-    parser.add_argument("--profile", default="@g1", help="Perfil do X/Twitter para coletar os dados.")
+    parser = argparse.ArgumentParser(description="Coleta e analisa posts e comentários do X (aka Twitter).")
+    parser.add_argument("--profile", default="@g1", help="Perfil do X para coletar os dados.")
     parser.add_argument("--limit", type=int, default=3, help="Número de posts para coletar.") # Reduzido para testes
     parser.add_argument("--headless", type=bool, default=False, help="Executar o navegador em modo invisível.") # Alterado para visível por padrão
     args = parser.parse_args()

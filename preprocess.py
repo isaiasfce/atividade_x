@@ -1,9 +1,9 @@
-import re
+import re # Biblioteca para localizar e substituir padrões em strings
 
-URL_PATTERN = re.compile(r'https?://\S+|www\.S+')
-MENTION_HASHTAG = re.compile(r'[@#]\w+')
-NON_ALNUM = re.compile(r'[^0-9a-zA-ZÀ-ÿ\s]')
-MULTI_SPACE = re.compile(r'\s+')
+URL_PATTERN = re.compile(r'https?://\S+|www\.S+') # Remove links
+MENTION_HASHTAG = re.compile(r'[@#]\w+') # Remove menções e hashtags
+NON_ALNUM = re.compile(r'[^0-9a-zA-ZÀ-ÿ\s]') # Remove caracteres que não são letras, números ou acentos
+MULTI_SPACE = re.compile(r'\s+') # Substitui espaços múltiplos por apenas um espaço
 
 def clean_text(text: str) -> str:
     t = text or ""

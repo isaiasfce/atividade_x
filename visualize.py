@@ -5,7 +5,7 @@ def plot_by_post(csv_path="outputs/dataset.csv", out_image="outputs/sentiment_by
     # Carregar o CSV com os dados
     df = pd.read_csv(csv_path)
 
-    # Agrupar por postagem e sentimento
+    # Agrupar por postagem e sentimento em uma tabela
     counts = df.groupby(["codigo_da_postagem","sentimento"]).size().unstack(fill_value=0)
 
     # Criar gráfico de barras
@@ -15,7 +15,7 @@ def plot_by_post(csv_path="outputs/dataset.csv", out_image="outputs/sentiment_by
     ax.set_title("Distribuição de Sentimentos por Notícia")
     plt.legend(title="Sentimento")
 
-    # Ajustar layout e salvar imagem
+    # Ajustar layout para não cortar legendas/títulos e salva imagem
     plt.tight_layout()
     plt.savefig(out_image)
     print(f"Gráfico salvo em {out_image}")
